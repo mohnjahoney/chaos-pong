@@ -53,7 +53,9 @@
     const p1score = document.querySelector('#p1score'), p2score = document.querySelector('#p2score');
     const p1fill = document.querySelector('#p1fill'), p2fill = document.querySelector('#p2fill');
     const TAU = Math.PI * 2, colors = ['#51e6ff', '#ff5e9c'];
-    const TRAIL_POINTS = 40, TRAIL_SAMPLE_SECONDS = .045;
+    // Five-times denser sampling keeps the rendered Lorenz path smooth while
+    // retaining the fixed-size ring buffer for predictable memory use.
+    const TRAIL_POINTS = 40, TRAIL_SAMPLE_SECONDS = .009;
     let W, H, scale, particles = [], keys = new Set(), last = 0, paused = false, mode = 'solo', running = false;
     const players = [
       { x: .5, y: .68, score: 0, energy: .58, color: colors[0] },
