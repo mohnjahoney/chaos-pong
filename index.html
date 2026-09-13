@@ -43,10 +43,10 @@
     </div>
   </section>
   <div id="hud">
-    <div class="player"><div class="name" style="color:#51e6ff">Cyan gate · drag</div><div class="score" id="p1score">0</div><div class="meter"><div class="fill" id="p1fill"></div></div></div>
-    <div class="player p2"><div class="name" id="p2name" style="color:#ff5e9c">Pink gate · WASD</div><div class="score" id="p2score">0</div><div class="meter"><div class="fill" id="p2fill"></div></div></div>
+    <div class="player"><div class="name" style="color:#51e6ff">Cyan gate · drag horizontally</div><div class="score" id="p1score">0</div><div class="meter"><div class="fill" id="p1fill"></div></div></div>
+    <div class="player p2"><div class="name" id="p2name" style="color:#ff5e9c">Pink gate · A / D</div><div class="score" id="p2score">0</div><div class="meter"><div class="fill" id="p2fill"></div></div></div>
   </div>
-  <div id="help">Drag the cyan gate · catch your own color for 2 points + a split · R resets</div>
+  <div id="help">Slide the cyan gate horizontally · catch your own color for 2 points + a split · R resets</div>
   <script>
     const canvas = document.querySelector('#game'), ctx = canvas.getContext('2d');
     const splash = document.querySelector('#splash'), p2hud = document.querySelector('.p2'), p2name = document.querySelector('#p2name');
@@ -56,8 +56,8 @@
     const TRAIL_POINTS = 40, TRAIL_SAMPLE_SECONDS = .045;
     let W, H, scale, particles = [], keys = new Set(), last = 0, paused = false, mode = 'solo', running = false;
     const players = [
-      { x: .28, y: .5, score: 0, energy: .58, color: colors[0] },
-      { x: .72, y: .5, score: 0, energy: .58, color: colors[1] }
+      { x: .5, y: .68, score: 0, energy: .58, color: colors[0] },
+      { x: .5, y: .32, score: 0, energy: .58, color: colors[1] }
     ];
     const lorenz = { sigma: 10, rho: 28, beta: 8 / 3 };
 
@@ -102,16 +102,15 @@
       if (paused) return;
       if (mode === 'two') {
         players[1].x += ((keys.has('d')?1:0)-(keys.has('a')?1:0))*dt*.3;
-        players[1].y += ((keys.has('s')?1:0)-(keys.has('w')?1:0))*dt*.3;
       } else if (mode === 'computer') {
-        // Deliberately deterministic: a slow, predictable back-and-forth gate.
-        players[1].x = .73; players[1].y = .5 + Math.sin(performance.now()*.00125)*.29;
+        // Deliberately deterministic: a slow, predictable left-right gate.
+        players[1].x = .5 + Math.sin(performance.now()*.00125)*.38;
       }
       const activePlayers = mode === 'solo' ? players.slice(0,1) : players;
       for (const p of activePlayers) { p.x = Math.max(.08, Math.min(.92,p.x)); p.y = Math.max(.12, Math.min(.88,p.y)); p.energy = Math.max(0, p.energy - dt*.018); }
       for (const q of particles) {
         stepParticle(q, dt*.4); const pt = project(q.x,q.y,q.z);
-        for (let i=0;i<activePlayers.length;i++) { const g=activePlayers[i], gx=g.x*W, gy=g.y*H, radius=(22+g.energy*34)*devicePixelRatio; if ((pt.x-gx)**2+(pt.y-gy)**2 < radius*radius) catchParticle(q,i); }
+        for (let i=0;i<activePlayers.length;i++) { const g=activePlayers[i], gx=g.x*W, gy=g.y*H, halfWidth=(42+g.energy*58)*devicePixelRatio, halfHeight=22*devicePixelRatio; if (Math.abs(pt.x-gx)<halfWidth && Math.abs(pt.y-gy)<halfHeight) catchParticle(q,i); }
       }
       if (particles.length < 4) makeParticle();
       p1score.textContent=players[0].score; p2score.textContent=players[1].score; p1fill.style.transform=`scaleX(${players[0].energy})`; p2fill.style.transform=`scaleX(${players[1].energy})`;
@@ -131,13 +130,13 @@
       }
       ctx.shadowBlur=0;
       const activePlayers = mode === 'solo' ? players.slice(0,1) : players;
-      activePlayers.forEach((g,i)=>{ const x=g.x*W,y=g.y*H,r=(22+g.energy*34)*devicePixelRatio; ctx.strokeStyle=colors[i]; ctx.lineWidth=2*devicePixelRatio; ctx.shadowBlur=18*devicePixelRatio; ctx.shadowColor=colors[i]; ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.stroke(); ctx.fillStyle=colors[i]; ctx.globalAlpha=.1; ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.fill(); ctx.globalAlpha=1; }); ctx.shadowBlur=0;
+      activePlayers.forEach((g,i)=>{ const x=g.x*W,y=g.y*H,halfWidth=(42+g.energy*58)*devicePixelRatio,barHeight=7*devicePixelRatio; ctx.strokeStyle=colors[i]; ctx.lineWidth=2*devicePixelRatio; ctx.shadowBlur=18*devicePixelRatio; ctx.shadowColor=colors[i]; ctx.beginPath(); ctx.roundRect(x-halfWidth,y-barHeight/2,halfWidth*2,barHeight,barHeight/2); ctx.stroke(); ctx.fillStyle=colors[i]; ctx.globalAlpha=.16; ctx.fill(); ctx.globalAlpha=1; }); ctx.shadowBlur=0;
     }
     function frame(t) { const dt=Math.min(.035,(t-last)/1000||.016); last=t; if (running) update(dt); draw(); requestAnimationFrame(frame); } requestAnimationFrame(frame);
-    function moveCyanGate(clientX, clientY) { players[0].x=clientX/innerWidth; players[0].y=clientY/innerHeight; }
-    addEventListener('mousemove', e=>moveCyanGate(e.clientX, e.clientY));
-    addEventListener('pointermove', e=>{ if (e.pointerType === 'touch' || e.buttons) moveCyanGate(e.clientX, e.clientY); }, { passive: true });
-    addEventListener('pointerdown', e=>{ if (e.pointerType === 'touch') moveCyanGate(e.clientX, e.clientY); }, { passive: true });
+    function moveCyanGate(clientX) { players[0].x=clientX/innerWidth; }
+    addEventListener('mousemove', e=>moveCyanGate(e.clientX));
+    addEventListener('pointermove', e=>{ if (e.pointerType === 'touch' || e.buttons) moveCyanGate(e.clientX); }, { passive: true });
+    addEventListener('pointerdown', e=>{ if (e.pointerType === 'touch') moveCyanGate(e.clientX); }, { passive: true });
     addEventListener('keydown', e=>{ keys.add(e.key.toLowerCase()); if(e.key.toLowerCase()==='r') { particles=[]; players.forEach(p=>{p.score=0;p.energy=.58}); for(let i=0;i<4;i++) makeParticle(); } if(e.key===' ') paused=!paused; });
     addEventListener('keyup', e=>keys.delete(e.key.toLowerCase()));
     document.querySelectorAll('.mode').forEach(button => button.addEventListener('click', () => {
