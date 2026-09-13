@@ -55,11 +55,11 @@
     const TAU = Math.PI * 2, colors = ['#51e6ff', '#ff5e9c'];
     // Five-times denser sampling keeps the rendered Lorenz path smooth while
     // retaining the fixed-size ring buffer for predictable memory use.
-    const TRAIL_POINTS = 40, TRAIL_SAMPLE_SECONDS = .009;
+    const TRAIL_POINTS = 40, TRAIL_SAMPLE_SECONDS = .009, TRACK_Y = .58;
     let W, H, scale, particles = [], keys = new Set(), last = 0, paused = false, mode = 'solo', running = false;
     const players = [
-      { x: .5, y: .68, score: 0, energy: .58, color: colors[0] },
-      { x: .5, y: .32, score: 0, energy: .58, color: colors[1] }
+      { x: .5, y: TRACK_Y, score: 0, energy: .15, color: colors[0] },
+      { x: .5, y: TRACK_Y, score: 0, energy: .15, color: colors[1] }
     ];
     const lorenz = { sigma: 10, rho: 28, beta: 8 / 3 };
 
@@ -110,9 +110,12 @@
       }
       const activePlayers = mode === 'solo' ? players.slice(0,1) : players;
       for (const p of activePlayers) { p.x = Math.max(.08, Math.min(.92,p.x)); p.y = Math.max(.12, Math.min(.88,p.y)); p.energy = Math.max(0, p.energy - dt*.018); }
+      activePlayers.forEach(p => p.y = TRACK_Y);
       for (const q of particles) {
         stepParticle(q, dt*.4); const pt = project(q.x,q.y,q.z);
-        for (let i=0;i<activePlayers.length;i++) { const g=activePlayers[i], gx=g.x*W, gy=g.y*H, halfWidth=(42+g.energy*58)*devicePixelRatio, halfHeight=22*devicePixelRatio; if (Math.abs(pt.x-gx)<halfWidth && Math.abs(pt.y-gy)<halfHeight) catchParticle(q,i); }
+        let winner = -1, nearest = Infinity;
+        for (let i=0;i<activePlayers.length;i++) { const g=activePlayers[i], gx=g.x*W, gy=g.y*H, halfWidth=(10+g.energy*65)*devicePixelRatio, halfHeight=22*devicePixelRatio, distance=Math.abs(pt.x-gx); if (distance<halfWidth && Math.abs(pt.y-gy)<halfHeight && distance<nearest) { winner=i; nearest=distance; } }
+        if (winner >= 0) catchParticle(q,winner);
       }
       if (particles.length < 4) makeParticle();
       p1score.textContent=players[0].score; p2score.textContent=players[1].score; p1fill.style.transform=`scaleX(${players[0].energy})`; p2fill.style.transform=`scaleX(${players[1].energy})`;
@@ -132,14 +135,14 @@
       }
       ctx.shadowBlur=0;
       const activePlayers = mode === 'solo' ? players.slice(0,1) : players;
-      activePlayers.forEach((g,i)=>{ const x=g.x*W,y=g.y*H,halfWidth=(42+g.energy*58)*devicePixelRatio,barHeight=7*devicePixelRatio; ctx.strokeStyle=colors[i]; ctx.lineWidth=2*devicePixelRatio; ctx.shadowBlur=18*devicePixelRatio; ctx.shadowColor=colors[i]; ctx.beginPath(); ctx.roundRect(x-halfWidth,y-barHeight/2,halfWidth*2,barHeight,barHeight/2); ctx.stroke(); ctx.fillStyle=colors[i]; ctx.globalAlpha=.16; ctx.fill(); ctx.globalAlpha=1; }); ctx.shadowBlur=0;
+      activePlayers.forEach((g,i)=>{ const x=g.x*W,y=g.y*H,halfWidth=(10+g.energy*65)*devicePixelRatio,barHeight=7*devicePixelRatio; ctx.strokeStyle=colors[i]; ctx.lineWidth=2*devicePixelRatio; ctx.shadowBlur=18*devicePixelRatio; ctx.shadowColor=colors[i]; ctx.beginPath(); ctx.roundRect(x-halfWidth,y-barHeight/2,halfWidth*2,barHeight,barHeight/2); ctx.stroke(); ctx.fillStyle=colors[i]; ctx.globalAlpha=.16; ctx.fill(); ctx.globalAlpha=1; }); ctx.shadowBlur=0;
     }
     function frame(t) { const dt=Math.min(.035,(t-last)/1000||.016); last=t; if (running) update(dt); draw(); requestAnimationFrame(frame); } requestAnimationFrame(frame);
     function moveCyanGate(clientX) { players[0].x=clientX/innerWidth; }
     addEventListener('mousemove', e=>moveCyanGate(e.clientX));
     addEventListener('pointermove', e=>{ if (e.pointerType === 'touch' || e.buttons) moveCyanGate(e.clientX); }, { passive: true });
     addEventListener('pointerdown', e=>{ if (e.pointerType === 'touch') moveCyanGate(e.clientX); }, { passive: true });
-    addEventListener('keydown', e=>{ keys.add(e.key.toLowerCase()); if(e.key.toLowerCase()==='r') { particles=[]; players.forEach(p=>{p.score=0;p.energy=.58}); for(let i=0;i<4;i++) makeParticle(); } if(e.key===' ') paused=!paused; });
+    addEventListener('keydown', e=>{ keys.add(e.key.toLowerCase()); if(e.key.toLowerCase()==='r') { particles=[]; players.forEach(p=>{p.score=0;p.energy=.15;p.y=TRACK_Y}); for(let i=0;i<4;i++) makeParticle(); } if(e.key===' ') paused=!paused; });
     addEventListener('keyup', e=>keys.delete(e.key.toLowerCase()));
     document.querySelectorAll('.mode').forEach(button => button.addEventListener('click', () => {
       document.querySelectorAll('.mode').forEach(b => b.classList.remove('selected'));
