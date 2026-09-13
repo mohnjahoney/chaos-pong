@@ -53,7 +53,8 @@
     const p1score = document.querySelector('#p1score'), p2score = document.querySelector('#p2score');
     const p1fill = document.querySelector('#p1fill'), p2fill = document.querySelector('#p2fill');
     const TAU = Math.PI * 2, colors = ['#51e6ff', '#ff5e9c'];
-    let W, H, scale, particles = [], trail = [], keys = new Set(), last = 0, paused = false, mode = 'solo', running = false;
+    const TRAIL_POINTS = 40, TRAIL_SAMPLE_SECONDS = .045;
+    let W, H, scale, particles = [], keys = new Set(), last = 0, paused = false, mode = 'solo', running = false;
     const players = [
       { x: .28, y: .5, score: 0, energy: .58, color: colors[0] },
       { x: .72, y: .5, score: 0, energy: .58, color: colors[1] }
@@ -62,10 +63,18 @@
 
     function resize() { W = canvas.width = innerWidth * devicePixelRatio; H = canvas.height = innerHeight * devicePixelRatio; canvas.style.width = innerWidth+'px'; canvas.style.height = innerHeight+'px'; scale = Math.min(W, H) * .015; }
     addEventListener('resize', resize); resize();
-    function makeParticle(x = (Math.random()-.5)*12, y = (Math.random()-.5)*12, z = 25 + Math.random()*10, owner = -1, vx = 0, vy = 0) {
-      particles.push({ x, y, z, owner, age: 0, cool: .25, vx, vy, wobble: Math.random()*TAU });
+    function recordTrail(q) {
+      const offset = q.trailHead * 2;
+      q.trail[offset] = q.x; q.trail[offset + 1] = q.z;
+      q.trailHead = (q.trailHead + 1) % TRAIL_POINTS;
+      q.trailCount = Math.min(TRAIL_POINTS, q.trailCount + 1);
     }
-    for (let i=0;i<34;i++) makeParticle();
+    function makeParticle(x = (Math.random()-.5)*12, y = (Math.random()-.5)*12, z = 25 + Math.random()*10, owner = -1, vx = 0, vy = 0) {
+      const q = { x, y, z, owner, age: 0, cool: .25, vx, vy, wobble: Math.random()*TAU,
+        trail: new Float32Array(TRAIL_POINTS * 2), trailHead: 0, trailCount: 0, trailTimer: 0 };
+      particles.push(q); recordTrail(q);
+    }
+    for (let i=0;i<4;i++) makeParticle();
 
     // Canonical Lorenz view: plot X horizontally against Z vertically.
     // This exposes the attractor's recognizable two-wing / butterfly shape.
@@ -78,7 +87,9 @@
       q.age += dt; q.cool -= dt;
       // A small physical impulse gives catches a visible, controllable consequence.
       q.x += q.vx*dt; q.y += q.vy*dt; q.vx *= Math.pow(.03, dt); q.vy *= Math.pow(.03, dt);
-      if (q.age > 26) { q.age = 0; q.x = (Math.random()-.5)*5; q.y = (Math.random()-.5)*5; q.z = 25+Math.random()*8; q.owner = -1; }
+      q.trailTimer += dt;
+      if (q.trailTimer >= TRAIL_SAMPLE_SECONDS) { q.trailTimer %= TRAIL_SAMPLE_SECONDS; recordTrail(q); }
+      if (q.age > 26) { q.age = 0; q.x = (Math.random()-.5)*5; q.y = (Math.random()-.5)*5; q.z = 25+Math.random()*8; q.owner = -1; q.trailHead = 0; q.trailCount = 0; q.trailTimer = 0; recordTrail(q); }
     }
     function catchParticle(q, playerIndex) {
       if (q.cool > 0) return;
@@ -99,17 +110,26 @@
       const activePlayers = mode === 'solo' ? players.slice(0,1) : players;
       for (const p of activePlayers) { p.x = Math.max(.08, Math.min(.92,p.x)); p.y = Math.max(.12, Math.min(.88,p.y)); p.energy = Math.max(0, p.energy - dt*.018); }
       for (const q of particles) {
-        stepParticle(q, dt*1.6); const pt = project(q.x,q.y,q.z);
+        stepParticle(q, dt*.4); const pt = project(q.x,q.y,q.z);
         for (let i=0;i<activePlayers.length;i++) { const g=activePlayers[i], gx=g.x*W, gy=g.y*H, radius=(22+g.energy*34)*devicePixelRatio; if ((pt.x-gx)**2+(pt.y-gy)**2 < radius*radius) catchParticle(q,i); }
       }
-      if (particles.length < 30) makeParticle();
-      trail.push(...particles.map(q=>project(q.x,q.y,q.z))); if (trail.length > 900) trail.splice(0, trail.length-900);
+      if (particles.length < 4) makeParticle();
       p1score.textContent=players[0].score; p2score.textContent=players[1].score; p1fill.style.transform=`scaleX(${players[0].energy})`; p2fill.style.transform=`scaleX(${players[1].energy})`;
     }
     function draw() {
       ctx.fillStyle='rgba(5,7,13,.22)'; ctx.fillRect(0,0,W,H);
-      ctx.globalAlpha=.09; ctx.fillStyle='#9ba9ff'; for (let i=0;i<trail.length;i+=3) { const t=trail[i]; ctx.fillRect(t.x,t.y,1.5*devicePixelRatio,1.5*devicePixelRatio); } ctx.globalAlpha=1;
-      for (const q of particles) { const pt=project(q.x,q.y,q.z), c=q.owner<0?'#dbe2ff':colors[q.owner]; ctx.shadowBlur=12*devicePixelRatio; ctx.shadowColor=c; ctx.fillStyle=c; ctx.beginPath(); ctx.arc(pt.x,pt.y,(q.owner<0?2.2:3.2)*devicePixelRatio,0,TAU); ctx.fill(); }
+      for (const q of particles) {
+        const c=q.owner<0?'#dbe2ff':colors[q.owner];
+        if (q.trailCount > 1) {
+          ctx.globalAlpha=.32; ctx.strokeStyle=c; ctx.lineWidth=1.25*devicePixelRatio; ctx.beginPath();
+          // Walk the ring from oldest sample to newest without shifting or copying.
+          const first=(q.trailHead-q.trailCount+TRAIL_POINTS)%TRAIL_POINTS;
+          for (let i=0;i<q.trailCount;i++) { const index=(first+i)%TRAIL_POINTS, t=project(q.trail[index*2],0,q.trail[index*2+1]); if(i===0) ctx.moveTo(t.x,t.y); else ctx.lineTo(t.x,t.y); }
+          ctx.stroke(); ctx.globalAlpha=1;
+        }
+        const pt=project(q.x,q.y,q.z); ctx.shadowBlur=12*devicePixelRatio; ctx.shadowColor=c; ctx.fillStyle=c; ctx.beginPath(); ctx.arc(pt.x,pt.y,(q.owner<0?2.2:3.2)*devicePixelRatio,0,TAU); ctx.fill();
+      }
+      ctx.shadowBlur=0;
       const activePlayers = mode === 'solo' ? players.slice(0,1) : players;
       activePlayers.forEach((g,i)=>{ const x=g.x*W,y=g.y*H,r=(22+g.energy*34)*devicePixelRatio; ctx.strokeStyle=colors[i]; ctx.lineWidth=2*devicePixelRatio; ctx.shadowBlur=18*devicePixelRatio; ctx.shadowColor=colors[i]; ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.stroke(); ctx.fillStyle=colors[i]; ctx.globalAlpha=.1; ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.fill(); ctx.globalAlpha=1; }); ctx.shadowBlur=0;
     }
@@ -118,7 +138,7 @@
     addEventListener('mousemove', e=>moveCyanGate(e.clientX, e.clientY));
     addEventListener('pointermove', e=>{ if (e.pointerType === 'touch' || e.buttons) moveCyanGate(e.clientX, e.clientY); }, { passive: true });
     addEventListener('pointerdown', e=>{ if (e.pointerType === 'touch') moveCyanGate(e.clientX, e.clientY); }, { passive: true });
-    addEventListener('keydown', e=>{ keys.add(e.key.toLowerCase()); if(e.key.toLowerCase()==='r') { particles=[]; trail=[]; players.forEach(p=>{p.score=0;p.energy=.58}); for(let i=0;i<34;i++) makeParticle(); } if(e.key===' ') paused=!paused; });
+    addEventListener('keydown', e=>{ keys.add(e.key.toLowerCase()); if(e.key.toLowerCase()==='r') { particles=[]; players.forEach(p=>{p.score=0;p.energy=.58}); for(let i=0;i<4;i++) makeParticle(); } if(e.key===' ') paused=!paused; });
     addEventListener('keyup', e=>keys.delete(e.key.toLowerCase()));
     document.querySelectorAll('.mode').forEach(button => button.addEventListener('click', () => {
       document.querySelectorAll('.mode').forEach(b => b.classList.remove('selected'));
