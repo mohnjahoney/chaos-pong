@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chaos Pong — Gate Prototype</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #05070d; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; touch-action: none; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+    #splash { position: fixed; inset: 0; z-index: 5; display: grid; place-items: center; background: radial-gradient(circle at 50% 42%, #12182d 0%, #05070d 58%); }
+    .splash-card { width: min(430px, calc(100vw - 42px)); text-align: center; }
+    .eyebrow { color: #8290c7; font-size: 11px; letter-spacing: .3em; text-transform: uppercase; margin-bottom: 16px; }
+    h1 { margin: 0 0 34px; color: #e9edff; font-size: clamp(48px, 13vw, 86px); line-height: .9; letter-spacing: -.08em; text-transform: lowercase; text-shadow: 0 0 28px #6878ff66; }
+    .mode-toggle { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 20px; }
+    .mode { appearance: none; border: 1px solid #29304a; border-radius: 8px; background: #0d1120; color: #9ba6cc; padding: 13px 14px; font: inherit; font-size: 12px; cursor: pointer; }
+    .mode.selected { border-color: #51e6ff; color: #e9edff; background: #142539; box-shadow: 0 0 20px #51e6ff1f; }
+    #start { appearance: none; border: 0; border-radius: 8px; width: 100%; padding: 15px; background: linear-gradient(100deg, #51e6ff, #8b83ff); color: #06101b; font: inherit; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
+    #hud { position: fixed; inset: 0 0 auto; display: flex; justify-content: space-between; padding: 18px 24px; pointer-events: none; text-shadow: 0 2px 12px #000; }
+    .player { min-width: 170px; }
+    .p2 { text-align: right; }
+    .name { font-size: 12px; letter-spacing: .15em; text-transform: uppercase; opacity: .72; }
+    .score { font-size: 30px; line-height: 1.1; }
+    .meter { width: 170px; height: 5px; margin-top: 8px; background: #1b2030; border-radius: 5px; overflow: hidden; }
+    .fill { height: 100%; transform-origin: left; transition: transform .12s linear; }
+    #p1fill { background: #51e6ff; } #p2fill { background: #ff5e9c; transform-origin: right; }
+    #help { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); font-size: 11px; opacity: .55; white-space: nowrap; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <section id="splash" aria-label="Chaos Pong start screen">
+    <div class="splash-card">
+      <div class="eyebrow">a chaotic gate game</div>
+      <h1>chaos pong</h1>
+      <div class="mode-toggle" role="group" aria-label="Choose game mode">
+        <button class="mode selected" data-mode="solo">one player</button>
+        <button class="mode" data-mode="computer">one player vs computer</button>
+        <button class="mode" data-mode="two">two players</button>
+      </div>
+      <button id="start">begin</button>
+    </div>
+  </section>
+  <div id="hud">
+    <div class="player"><div class="name" style="color:#51e6ff">Cyan gate · drag</div><div class="score" id="p1score">0</div><div class="meter"><div class="fill" id="p1fill"></div></div></div>
+    <div class="player p2"><div class="name" id="p2name" style="color:#ff5e9c">Pink gate · WASD</div><div class="score" id="p2score">0</div><div class="meter"><div class="fill" id="p2fill"></div></div></div>
+  </div>
+  <div id="help">Drag the cyan gate · catch your own color for 2 points + a split · R resets</div>
+  <script>
+    const canvas = document.querySelector('#game'), ctx = canvas.getContext('2d');
+    const splash = document.querySelector('#splash'), p2hud = document.querySelector('.p2'), p2name = document.querySelector('#p2name');
+    const p1score = document.querySelector('#p1score'), p2score = document.querySelector('#p2score');
+    const p1fill = document.querySelector('#p1fill'), p2fill = document.querySelector('#p2fill');
+    const TAU = Math.PI * 2, colors = ['#51e6ff', '#ff5e9c'];
+    let W, H, scale, particles = [], trail = [], keys = new Set(), last = 0, paused = false, mode = 'solo', running = false;
+    const players = [
+      { x: .28, y: .5, score: 0, energy: .58, color: colors[0] },
+      { x: .72, y: .5, score: 0, energy: .58, color: colors[1] }
+    ];
+    const lorenz = { sigma: 10, rho: 28, beta: 8 / 3 };
+
+    function resize() { W = canvas.width = innerWidth * devicePixelRatio; H = canvas.height = innerHeight * devicePixelRatio; canvas.style.width = innerWidth+'px'; canvas.style.height = innerHeight+'px'; scale = Math.min(W, H) * .015; }
+    addEventListener('resize', resize); resize();
+    function makeParticle(x = (Math.random()-.5)*12, y = (Math.random()-.5)*12, z = 25 + Math.random()*10, owner = -1, vx = 0, vy = 0) {
+      particles.push({ x, y, z, owner, age: 0, cool: .25, vx, vy, wobble: Math.random()*TAU });
+    }
+    for (let i=0;i<34;i++) makeParticle();
+
+    function project(x, y, z) {
+      const yaw = -.34, pitch = -.22;
+      const xx = x*Math.cos(yaw) - z*Math.sin(yaw);
+      const zz = x*Math.sin(yaw) + z*Math.cos(yaw);
+      const yy = y*Math.cos(pitch) - zz*Math.sin(pitch);
+      return { x: W/2 + xx*scale, y: H/2 - yy*scale*.9 };
+    }
+    function stepParticle(q, dt) {
+      const dx = lorenz.sigma*(q.y-q.x), dy = q.x*(lorenz.rho-q.z)-q.y, dz = q.x*q.y-lorenz.beta*q.z;
+      q.x += dx*dt; q.y += dy*dt; q.z += dz*dt;
+      q.age += dt; q.cool -= dt;
+      // A small physical impulse gives catches a visible, controllable consequence.
+      q.x += q.vx*dt; q.y += q.vy*dt; q.vx *= Math.pow(.03, dt); q.vy *= Math.pow(.03, dt);
+      if (q.age > 26) { q.age = 0; q.x = (Math.random()-.5)*5; q.y = (Math.random()-.5)*5; q.z = 25+Math.random()*8; q.owner = -1; }
+    }
+    function catchParticle(q, playerIndex) {
+      if (q.cool > 0) return;
+      const player = players[playerIndex], wasOwn = q.owner === playerIndex;
+      player.score += wasOwn ? 2 : 1; player.energy = Math.min(1, player.energy + (wasOwn ? .16 : .1));
+      q.owner = playerIndex; q.cool = .7; q.vx = (playerIndex ? -1 : 1) * (2 + Math.random()*2); q.vy = (Math.random()-.5)*3;
+      if (wasOwn && particles.length < 90) { makeParticle(q.x+.08, q.y+.08, q.z+.12, playerIndex, q.vx*.5, q.vy*.5); makeParticle(q.x-.08, q.y-.08, q.z-.12, playerIndex, q.vx*.5, q.vy*.5); }
+    }
+    function update(dt) {
+      if (paused) return;
+      if (mode === 'two') {
+        players[1].x += ((keys.has('d')?1:0)-(keys.has('a')?1:0))*dt*.3;
+        players[1].y += ((keys.has('s')?1:0)-(keys.has('w')?1:0))*dt*.3;
+      } else if (mode === 'computer') {
+        // Deliberately deterministic: a slow, predictable back-and-forth gate.
+        players[1].x = .73; players[1].y = .5 + Math.sin(performance.now()*.00125)*.29;
+      }
+      const activePlayers = mode === 'solo' ? players.slice(0,1) : players;
+      for (const p of activePlayers) { p.x = Math.max(.08, Math.min(.92,p.x)); p.y = Math.max(.12, Math.min(.88,p.y)); p.energy = Math.max(0, p.energy - dt*.018); }
+      for (const q of particles) {
+        stepParticle(q, dt*1.6); const pt = project(q.x,q.y,q.z);
+        for (let i=0;i<activePlayers.length;i++) { const g=activePlayers[i], gx=g.x*W, gy=g.y*H, radius=(22+g.energy*34)*devicePixelRatio; if ((pt.x-gx)**2+(pt.y-gy)**2 < radius*radius) catchParticle(q,i); }
+      }
+      if (particles.length < 30) makeParticle();
+      trail.push(...particles.map(q=>project(q.x,q.y,q.z))); if (trail.length > 900) trail.splice(0, trail.length-900);
+      p1score.textContent=players[0].score; p2score.textContent=players[1].score; p1fill.style.transform=`scaleX(${players[0].energy})`; p2fill.style.transform=`scaleX(${players[1].energy})`;
+    }
+    function draw() {
+      ctx.fillStyle='rgba(5,7,13,.22)'; ctx.fillRect(0,0,W,H);
+      ctx.globalAlpha=.09; ctx.fillStyle='#9ba9ff'; for (let i=0;i<trail.length;i+=3) { const t=trail[i]; ctx.fillRect(t.x,t.y,1.5*devicePixelRatio,1.5*devicePixelRatio); } ctx.globalAlpha=1;
+      for (const q of particles) { const pt=project(q.x,q.y,q.z), c=q.owner<0?'#dbe2ff':colors[q.owner]; ctx.shadowBlur=12*devicePixelRatio; ctx.shadowColor=c; ctx.fillStyle=c; ctx.beginPath(); ctx.arc(pt.x,pt.y,(q.owner<0?2.2:3.2)*devicePixelRatio,0,TAU); ctx.fill(); }
+      const activePlayers = mode === 'solo' ? players.slice(0,1) : players;
+      activePlayers.forEach((g,i)=>{ const x=g.x*W,y=g.y*H,r=(22+g.energy*34)*devicePixelRatio; ctx.strokeStyle=colors[i]; ctx.lineWidth=2*devicePixelRatio; ctx.shadowBlur=18*devicePixelRatio; ctx.shadowColor=colors[i]; ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.stroke(); ctx.fillStyle=colors[i]; ctx.globalAlpha=.1; ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.fill(); ctx.globalAlpha=1; }); ctx.shadowBlur=0;
+    }
+    function frame(t) { const dt=Math.min(.035,(t-last)/1000||.016); last=t; if (running) update(dt); draw(); requestAnimationFrame(frame); } requestAnimationFrame(frame);
+    function moveCyanGate(clientX, clientY) { players[0].x=clientX/innerWidth; players[0].y=clientY/innerHeight; }
+    addEventListener('mousemove', e=>moveCyanGate(e.clientX, e.clientY));
+    addEventListener('pointermove', e=>{ if (e.pointerType === 'touch' || e.buttons) moveCyanGate(e.clientX, e.clientY); }, { passive: true });
+    addEventListener('pointerdown', e=>{ if (e.pointerType === 'touch') moveCyanGate(e.clientX, e.clientY); }, { passive: true });
+    addEventListener('keydown', e=>{ keys.add(e.key.toLowerCase()); if(e.key.toLowerCase()==='r') { particles=[]; trail=[]; players.forEach(p=>{p.score=0;p.energy=.58}); for(let i=0;i<34;i++) makeParticle(); } if(e.key===' ') paused=!paused; });
+    addEventListener('keyup', e=>keys.delete(e.key.toLowerCase()));
+    document.querySelectorAll('.mode').forEach(button => button.addEventListener('click', () => {
+      document.querySelectorAll('.mode').forEach(b => b.classList.remove('selected'));
+      button.classList.add('selected'); mode = button.dataset.mode;
+    }));
+    document.querySelector('#start').addEventListener('click', () => {
+      running = true; splash.style.display = 'none';
+      p2hud.style.display = mode === 'solo' ? 'none' : '';
+      p2name.textContent = mode === 'computer' ? 'Pink gate · computer' : 'Pink gate · WASD';
+    });
+  </script>
+</body>
+</html>
