@@ -67,12 +67,10 @@
     }
     for (let i=0;i<34;i++) makeParticle();
 
+    // Canonical Lorenz view: plot X horizontally against Z vertically.
+    // This exposes the attractor's recognizable two-wing / butterfly shape.
     function project(x, y, z) {
-      const yaw = -.34, pitch = -.22;
-      const xx = x*Math.cos(yaw) - z*Math.sin(yaw);
-      const zz = x*Math.sin(yaw) + z*Math.cos(yaw);
-      const yy = y*Math.cos(pitch) - zz*Math.sin(pitch);
-      return { x: W/2 + xx*scale, y: H/2 - yy*scale*.9 };
+      return { x: W/2 + x*scale*1.15, y: H*.72 - z*scale*1.05 };
     }
     function stepParticle(q, dt) {
       const dx = lorenz.sigma*(q.y-q.x), dy = q.x*(lorenz.rho-q.z)-q.y, dz = q.x*q.y-lorenz.beta*q.z;
