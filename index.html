@@ -9,6 +9,7 @@
     * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; overflow: hidden; background: #05070d; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; touch-action: none; }
     canvas { display: block; width: 100vw; height: 100vh; border: 2px solid #394363; box-shadow: inset 0 0 0 1px #11182a, inset 0 0 34px #27345d33; }
+    #threeGame { position: fixed; inset: 0; display: none; width: 100vw; height: 100vh; border: 2px solid #394363; background: #05070d; }
     #splash { position: fixed; inset: 0; z-index: 5; display: grid; place-items: center; background: radial-gradient(circle at 50% 42%, #12182d 0%, #05070d 58%); }
     .splash-card { width: min(430px, calc(100vw - 42px)); text-align: center; }
     .eyebrow { color: #8290c7; font-size: 11px; letter-spacing: .3em; text-transform: uppercase; margin-bottom: 16px; }
@@ -39,6 +40,7 @@
 </head>
 <body>
   <canvas id="game"></canvas>
+  <canvas id="threeGame"></canvas>
   <section id="splash" aria-label="Chaos Pong start screen">
     <div class="splash-card">
       <div class="eyebrow">a chaotic gate game</div>
@@ -62,16 +64,20 @@
     <label class="dev-row">Gate size follows
       <select id="gateSizing"><option value="ownership">ownership ratio</option><option value="count">owned count</option><option value="score">total points</option><option value="fixed">fixed size</option></select>
     </label>
+    <label class="dev-row">Renderer
+      <select id="renderer"><option value="canvas">Canvas 2D</option><option value="three">Three.js 3D</option></select>
+    </label>
     <label class="dev-row">Defender <input id="defenderEnabled" type="checkbox"></label>
     <label class="dev-row">Defender action
       <select id="defenderAction"><option value="neutralize">return to neutral</option><option value="kill">kill particle</option></select>
     </label>
   </aside>
   <div id="help">Slide the cyan gate horizontally · catch your own color for 2 points + a split · R resets</div>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.min.js"></script>
   <script>
     const canvas = document.querySelector('#game'), ctx = canvas.getContext('2d');
     const splash = document.querySelector('#splash'), p2hud = document.querySelector('.p2'), p2name = document.querySelector('#p2name');
-    const devToggle = document.querySelector('#devToggle'), devPanel = document.querySelector('#devPanel'), gateSizing = document.querySelector('#gateSizing'), defenderEnabled = document.querySelector('#defenderEnabled'), defenderAction = document.querySelector('#defenderAction');
+    const devToggle = document.querySelector('#devToggle'), devPanel = document.querySelector('#devPanel'), gateSizing = document.querySelector('#gateSizing'), rendererSelect = document.querySelector('#renderer'), defenderEnabled = document.querySelector('#defenderEnabled'), defenderAction = document.querySelector('#defenderAction');
     const cyanCount = document.querySelector('#cyanCount'), pinkCount = document.querySelector('#pinkCount'), totalCount = document.querySelector('#totalCount');
     const p1score = document.querySelector('#p1score'), p2score = document.querySelector('#p2score');
     const p1fill = document.querySelector('#p1fill'), p2fill = document.querySelector('#p2fill');
@@ -85,22 +91,65 @@
       { x: .5, y: TRACK_Y, score: 0, energy: .15, owned: 0, color: colors[0] },
       { x: .5, y: TRACK_Y, score: 0, energy: .15, owned: 0, color: colors[1] }
     ];
-    const dev = { gateSizing: 'ownership', defender: false, defenderAction: 'neutralize' };
+    const dev = { gateSizing: 'ownership', renderer: 'canvas', defender: false, defenderAction: 'neutralize' };
     const defender = { x: .5, y: TRACK_Y, halfWidth: 34 };
     const defenderDriver = { x: 3, y: 4, z: 27 };
     const lorenz = { sigma: 10, rho: 28, beta: 8 / 3 };
+    const threeCanvas = document.querySelector('#threeGame');
+    let threeRenderer, threeScene, threeCamera, threeGroup, threeParticles=[], threeGates=[];
 
-    function resize() { W = canvas.width = innerWidth * devicePixelRatio; H = canvas.height = innerHeight * devicePixelRatio; canvas.style.width = innerWidth+'px'; canvas.style.height = innerHeight+'px'; scale = Math.min(W, H) * .021; }
+    function initThree() {
+      if (!window.THREE) return false;
+      threeRenderer = new THREE.WebGLRenderer({ canvas: threeCanvas, antialias: true });
+      threeRenderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+      threeRenderer.setSize(innerWidth, innerHeight, false);
+      threeScene = new THREE.Scene(); threeScene.background = new THREE.Color('#05070d');
+      threeCamera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, .1, 500);
+      threeGroup = new THREE.Group(); threeScene.add(threeGroup);
+      return true;
+    }
+    function syncRenderer() {
+      if (dev.renderer === 'three' && !threeRenderer && !initThree()) { dev.renderer='canvas'; rendererSelect.value='canvas'; }
+      const useThree = dev.renderer === 'three' && !!threeRenderer;
+      canvas.style.display = useThree ? 'none' : 'block'; threeCanvas.style.display = useThree ? 'block' : 'none';
+    }
+    function drawThree(time) {
+      if (!threeRenderer) return;
+      const target = new THREE.Vector3(0,0,25), angle=time*.00008;
+      threeCamera.position.set(Math.cos(angle)*88, 34+Math.sin(angle*.7)*8, 25+Math.sin(angle)*88); threeCamera.lookAt(target);
+      while (threeParticles.length < particles.length) {
+        const pointGeometry=new THREE.BufferGeometry(); pointGeometry.setAttribute('position',new THREE.Float32BufferAttribute([0,0,0],3));
+        const pointMaterial=new THREE.PointsMaterial({color:'#dbe2ff',size:.9,transparent:true,opacity:.95,sizeAttenuation:true});
+        const point=new THREE.Points(pointGeometry,pointMaterial); threeGroup.add(point);
+        const lineGeometry=new THREE.BufferGeometry(); lineGeometry.setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(TRAIL_POINTS*3),3));
+        const line=new THREE.Line(lineGeometry,new THREE.LineBasicMaterial({color:'#dbe2ff',transparent:true,opacity:.5})); threeGroup.add(line);
+        threeParticles.push({point,line});
+      }
+      particles.forEach((q,i)=>{
+        const item=threeParticles[i], c=q.owner<0?'#dbe2ff':colors[q.owner]; item.point.material.color.set(c); item.line.material.color.set(c);
+        item.point.geometry.attributes.position.array.set([q.x,q.y,q.z]); item.point.geometry.attributes.position.needsUpdate=true;
+        const positions=item.line.geometry.attributes.position.array, first=(q.trailHead-q.trailCount+TRAIL_POINTS)%TRAIL_POINTS;
+        for(let j=0;j<TRAIL_POINTS;j++){ const src=j<q.trailCount?(first+j)%TRAIL_POINTS:null, o=j*3; if(src===null){positions[o]=q.x;positions[o+1]=q.y;positions[o+2]=q.z;} else {positions[o]=q.trail[src*3];positions[o+1]=q.trail[src*3+1];positions[o+2]=q.trail[src*3+2];} }
+        item.line.geometry.attributes.position.needsUpdate=true; item.line.geometry.setDrawRange(0,Math.max(2,q.trailCount));
+      });
+      threeParticles.forEach((item,i)=>{ item.point.visible=i<particles.length; item.line.visible=i<particles.length; });
+      const activePlayers=mode==='solo'?players.slice(0,1):players;
+      while(threeGates.length<activePlayers.length+(dev.defender?1:0)){ const mesh=new THREE.Mesh(new THREE.BoxGeometry(2,.45,.9),new THREE.MeshBasicMaterial({color:'#51e6ff',transparent:true,opacity:.85})); threeGroup.add(mesh); threeGates.push(mesh); }
+      threeGates.forEach((mesh,i)=>{ const isDefender=dev.defender && i===activePlayers.length, g=isDefender?defender:activePlayers[i]; if(!g){mesh.visible=false;return;} const half=isDefender?defender.halfWidth:gateHalfWidth(i), c=isDefender?'#ffd166':colors[i]; mesh.visible=true; mesh.position.set((g.x-.5)*42,0,15); mesh.scale.set(half/1.2,isDefender?2:1,1); mesh.material.color.set(c); });
+      threeRenderer.render(threeScene,threeCamera);
+    }
+
+    function resize() { W = canvas.width = innerWidth * devicePixelRatio; H = canvas.height = innerHeight * devicePixelRatio; canvas.style.width = innerWidth+'px'; canvas.style.height = innerHeight+'px'; scale = Math.min(W, H) * .021; if(threeRenderer){ threeRenderer.setSize(innerWidth,innerHeight,false); threeCamera.aspect=innerWidth/innerHeight; threeCamera.updateProjectionMatrix(); } }
     addEventListener('resize', resize); resize();
     function recordTrail(q) {
       const offset = q.trailHead * 2;
-      q.trail[offset] = q.x; q.trail[offset + 1] = q.z;
+      q.trail[offset] = q.x; q.trail[offset + 1] = q.y; q.trail[offset + 2] = q.z;
       q.trailHead = (q.trailHead + 1) % TRAIL_POINTS;
       q.trailCount = Math.min(TRAIL_POINTS, q.trailCount + 1);
     }
     function makeParticle(x = (Math.random()-.5)*12, y = (Math.random()-.5)*12, z = 25 + Math.random()*10, owner = -1, vx = 0, vy = 0) {
       const q = { x, y, z, owner, age: 0, cool: .25, vx, vy, wobble: Math.random()*TAU,
-        trail: new Float32Array(TRAIL_POINTS * 2), trailHead: 0, trailCount: 0, trailTimer: 0 };
+        trail: new Float32Array(TRAIL_POINTS * 3), trailHead: 0, trailCount: 0, trailTimer: 0 };
       particles.push(q); recordTrail(q);
     }
     for (let i=0;i<4;i++) makeParticle();
@@ -197,7 +246,7 @@
         if (q.trailCount < 2) continue;
         const path=trailPaths[q.owner+1];
         const first=(q.trailHead-q.trailCount+TRAIL_POINTS)%TRAIL_POINTS;
-        for (let i=0;i<q.trailCount;i++) { const index=(first+i)%TRAIL_POINTS, t=projectAttractor(q.trail[index*2],0,q.trail[index*2+1]); if(i===0) path.moveTo(t.x,t.y); else path.lineTo(t.x,t.y); }
+        for (let i=0;i<q.trailCount;i++) { const index=(first+i)%TRAIL_POINTS, t=projectAttractor(q.trail[index*3],0,q.trail[index*3+2]); if(i===0) path.moveTo(t.x,t.y); else path.lineTo(t.x,t.y); }
       }
       ctx.globalAlpha=.32; ctx.lineWidth=1.25*devicePixelRatio;
       ['#dbe2ff',colors[0],colors[1]].forEach((c,i)=>{ ctx.strokeStyle=c; ctx.stroke(trailPaths[i]); }); ctx.globalAlpha=1;
@@ -210,7 +259,7 @@
       const activePlayers = mode === 'solo' ? players.slice(0,1) : players;
       activePlayers.forEach((g,i)=>{ const x=g.x*W,y=g.y*H,halfWidth=gateHalfWidth(i)*devicePixelRatio,barHeight=7*devicePixelRatio; ctx.strokeStyle=colors[i]; ctx.lineWidth=2*devicePixelRatio; ctx.shadowBlur=18*devicePixelRatio; ctx.shadowColor=colors[i]; ctx.beginPath(); ctx.roundRect(x-halfWidth,y-barHeight/2,halfWidth*2,barHeight,barHeight/2); ctx.stroke(); ctx.fillStyle=colors[i]; ctx.globalAlpha=.16; ctx.fill(); ctx.globalAlpha=1; }); ctx.shadowBlur=0;
     }
-    function frame(t) { const dt=Math.min(.035,(t-last)/1000||.016); last=t; if (running) update(dt); draw(); requestAnimationFrame(frame); } requestAnimationFrame(frame);
+    function frame(t) { const dt=Math.min(.035,(t-last)/1000||.016); last=t; if (running) update(dt); if(dev.renderer==='three') drawThree(t); else draw(); requestAnimationFrame(frame); } requestAnimationFrame(frame);
     function moveCyanGate(clientX) { players[0].x=clientX/innerWidth; }
     addEventListener('mousemove', e=>moveCyanGate(e.clientX));
     addEventListener('pointermove', e=>{ if (e.pointerType === 'touch' || e.buttons) moveCyanGate(e.clientX); }, { passive: true });
@@ -219,6 +268,7 @@
     addEventListener('keyup', e=>keys.delete(e.key.toLowerCase()));
     devToggle.addEventListener('click', () => { const open=devPanel.classList.toggle('open'); devToggle.setAttribute('aria-expanded',String(open)); });
     gateSizing.addEventListener('change', e => { dev.gateSizing=e.target.value; });
+    rendererSelect.addEventListener('change', e => { dev.renderer=e.target.value; syncRenderer(); });
     defenderEnabled.addEventListener('change', e => { dev.defender=e.target.checked; });
     defenderAction.addEventListener('change', e => { dev.defenderAction=e.target.value; });
     document.querySelectorAll('.mode').forEach(button => button.addEventListener('click', () => {
