@@ -103,7 +103,7 @@
       const player = players[playerIndex], wasOwn = q.owner === playerIndex;
       player.score += wasOwn ? 2 : 1; player.energy = Math.min(1, player.energy + (wasOwn ? .16 : .1));
       q.owner = playerIndex; q.cool = .7; q.vx = (playerIndex ? -1 : 1) * (2 + Math.random()*2); q.vy = (Math.random()-.5)*3;
-      if (wasOwn && particles.length < 90) { makeParticle(q.x+.08, q.y+.08, q.z+.12, playerIndex, q.vx*.5, q.vy*.5); makeParticle(q.x-.08, q.y-.08, q.z-.12, playerIndex, q.vx*.5, q.vy*.5); }
+      if (wasOwn && particles.length < 200) { makeParticle(q.x+.08, q.y+.08, q.z+.12, playerIndex, q.vx*.5, q.vy*.5); makeParticle(q.x-.08, q.y-.08, q.z-.12, playerIndex, q.vx*.5, q.vy*.5); }
     }
     function update(dt) {
       if (paused) return;
