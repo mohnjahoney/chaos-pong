@@ -20,6 +20,13 @@
     #hud { position: fixed; inset: 0 0 auto; display: flex; justify-content: space-between; padding: 18px 24px; pointer-events: none; text-shadow: 0 2px 12px #000; }
     #population { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 20px; color: #dbe2ff; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; pointer-events: none; text-shadow: 0 2px 12px #000; }
     #population span { white-space: nowrap; }
+    #devToggle { position: fixed; right: 18px; bottom: 18px; z-index: 4; border: 1px solid #394363; border-radius: 6px; background: #0d1120dd; color: #aeb9df; padding: 8px 10px; font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .14em; cursor: pointer; }
+    #devPanel { position: fixed; right: 18px; bottom: 56px; z-index: 4; display: none; width: 250px; padding: 14px; border: 1px solid #394363; border-radius: 8px; background: #0b1020f2; color: #b7c1e5; box-shadow: 0 12px 36px #0008; font-size: 11px; }
+    #devPanel.open { display: block; }
+    #devPanel h2 { margin: 0 0 14px; color: #e9edff; font-size: 11px; letter-spacing: .18em; }
+    .dev-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 11px 0; }
+    .dev-row select { max-width: 135px; border: 1px solid #394363; border-radius: 4px; background: #11182a; color: #dbe2ff; padding: 5px; font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .dev-row input { accent-color: #ffd166; }
     .player { min-width: 170px; }
     .p2 { text-align: right; }
     .name { font-size: 12px; letter-spacing: .15em; text-transform: uppercase; opacity: .72; }
@@ -49,10 +56,22 @@
     <div class="player p2"><div class="name" id="p2name" style="color:#ff5e9c">Pink gate · A / D</div><div class="score" id="p2score">0</div><div class="meter"><div class="fill" id="p2fill"></div></div></div>
   </div>
   <div id="population" aria-label="Particle population"><span style="color:#51e6ff">cyan <b id="cyanCount">0</b></span><span style="color:#ff5e9c">pink <b id="pinkCount">0</b></span><span>total <b id="totalCount">0</b></span></div>
+  <button id="devToggle" aria-expanded="false">DEV</button>
+  <aside id="devPanel" aria-label="Developer options">
+    <h2>DEV PANEL</h2>
+    <label class="dev-row">Gate size follows
+      <select id="gateSizing"><option value="ownership">ownership ratio</option><option value="count">owned count</option><option value="score">total points</option><option value="fixed">fixed size</option></select>
+    </label>
+    <label class="dev-row">Defender <input id="defenderEnabled" type="checkbox"></label>
+    <label class="dev-row">Defender action
+      <select id="defenderAction"><option value="neutralize">return to neutral</option><option value="kill">kill particle</option></select>
+    </label>
+  </aside>
   <div id="help">Slide the cyan gate horizontally · catch your own color for 2 points + a split · R resets</div>
   <script>
     const canvas = document.querySelector('#game'), ctx = canvas.getContext('2d');
     const splash = document.querySelector('#splash'), p2hud = document.querySelector('.p2'), p2name = document.querySelector('#p2name');
+    const devToggle = document.querySelector('#devToggle'), devPanel = document.querySelector('#devPanel'), gateSizing = document.querySelector('#gateSizing'), defenderEnabled = document.querySelector('#defenderEnabled'), defenderAction = document.querySelector('#defenderAction');
     const cyanCount = document.querySelector('#cyanCount'), pinkCount = document.querySelector('#pinkCount'), totalCount = document.querySelector('#totalCount');
     const p1score = document.querySelector('#p1score'), p2score = document.querySelector('#p2score');
     const p1fill = document.querySelector('#p1fill'), p2fill = document.querySelector('#p2fill');
@@ -66,6 +85,9 @@
       { x: .5, y: TRACK_Y, score: 0, energy: .15, owned: 0, color: colors[0] },
       { x: .5, y: TRACK_Y, score: 0, energy: .15, owned: 0, color: colors[1] }
     ];
+    const dev = { gateSizing: 'ownership', defender: false, defenderAction: 'neutralize' };
+    const defender = { x: .5, y: TRACK_Y, halfWidth: 34 };
+    const defenderDriver = { x: 3, y: 4, z: 27 };
     const lorenz = { sigma: 10, rho: 28, beta: 8 / 3 };
 
     function resize() { W = canvas.width = innerWidth * devicePixelRatio; H = canvas.height = innerHeight * devicePixelRatio; canvas.style.width = innerWidth+'px'; canvas.style.height = innerHeight+'px'; scale = Math.min(W, H) * .021; }
@@ -109,9 +131,14 @@
       q.owner = playerIndex; q.cool = .7; q.vx = (playerIndex ? -1 : 1) * (2 + Math.random()*2); q.vy = (Math.random()-.5)*3;
       if (wasOwn && particles.length < 200) { makeParticle(q.x+.08, q.y+.08, q.z+.12, playerIndex, q.vx*.5, q.vy*.5); makeParticle(q.x-.08, q.y-.08, q.z-.12, playerIndex, q.vx*.5, q.vy*.5); }
     }
+    function gateSizeRatio(playerIndex) {
+      if (dev.gateSizing === 'fixed') return 0;
+      if (dev.gateSizing === 'count') return Math.min(1, players[playerIndex].owned / 100);
+      if (dev.gateSizing === 'score') return Math.min(1, players[playerIndex].score / 100);
+      return players[playerIndex].owned / Math.max(1, particles.length);
+    }
     function gateHalfWidth(playerIndex) {
-      const ownershipRatio = players[playerIndex].owned / Math.max(1, particles.length);
-      return GATE_MAX_HALF_WIDTH - ownershipRatio * (GATE_MAX_HALF_WIDTH - GATE_MIN_HALF_WIDTH);
+      return GATE_MAX_HALF_WIDTH - gateSizeRatio(playerIndex) * (GATE_MAX_HALF_WIDTH - GATE_MIN_HALF_WIDTH);
     }
     function update(dt) {
       if (paused) return;
@@ -124,8 +151,17 @@
       const activePlayers = mode === 'solo' ? players.slice(0,1) : players;
       for (const p of activePlayers) { p.x = Math.max(.08, Math.min(.92,p.x)); p.y = Math.max(.12, Math.min(.88,p.y)); p.energy = Math.max(0, p.energy - dt*.018); }
       activePlayers.forEach(p => p.y = TRACK_Y);
-      for (const q of particles) {
+      const driverDx = lorenz.sigma*(defenderDriver.y-defenderDriver.x), driverDy = defenderDriver.x*(lorenz.rho-defenderDriver.z)-defenderDriver.y, driverDz = defenderDriver.x*defenderDriver.y-lorenz.beta*defenderDriver.z;
+      defenderDriver.x += driverDx*dt*.4; defenderDriver.y += driverDy*dt*.4; defenderDriver.z += driverDz*dt*.4;
+      defender.x = Math.max(.08, Math.min(.92, projectAttractor(defenderDriver.x,0,0).x/W)); defender.y = TRACK_Y;
+      for (let qi=particles.length-1; qi>=0; qi--) {
+        const q=particles[qi];
         stepParticle(q, dt*.4); const pt = projectAttractor(q.x,q.y,q.z);
+        if (dev.defender && Math.abs(pt.x-defender.x*W)<defender.halfWidth*devicePixelRatio && Math.abs(pt.y-defender.y*H)<22*devicePixelRatio) {
+          if (dev.defenderAction === 'kill') particles.splice(qi,1);
+          else { q.owner=-1; q.cool=.7; }
+          continue;
+        }
         let winner = -1, nearest = Infinity;
         for (let i=0;i<activePlayers.length;i++) { const g=activePlayers[i], gx=g.x*W, gy=g.y*H, halfWidth=gateHalfWidth(i)*devicePixelRatio, halfHeight=22*devicePixelRatio, distance=Math.abs(pt.x-gx); if (distance<halfWidth && Math.abs(pt.y-gy)<halfHeight && distance<nearest) { winner=i; nearest=distance; } }
         if (winner >= 0) catchParticle(q,winner);
@@ -135,7 +171,7 @@
       players[0].owned=cyan; players[1].owned=pink;
       cyanCount.textContent=cyan; pinkCount.textContent=pink; totalCount.textContent=particles.length;
       p1fill.style.transform=`scaleX(${(gateHalfWidth(0)-GATE_MIN_HALF_WIDTH)/(GATE_MAX_HALF_WIDTH-GATE_MIN_HALF_WIDTH)})`; p2fill.style.transform=`scaleX(${(gateHalfWidth(1)-GATE_MIN_HALF_WIDTH)/(GATE_MAX_HALF_WIDTH-GATE_MIN_HALF_WIDTH)})`;
-      p1score.textContent=players[0].score; p2score.textContent=players[1].score; p1fill.style.transform=`scaleX(${players[0].energy})`; p2fill.style.transform=`scaleX(${players[1].energy})`;
+      p1score.textContent=players[0].score; p2score.textContent=players[1].score;
     }
     function drawAxes() {
       const origin=project(0,0,0), xEnd=project(24,0,0), xStart=project(-24,0,0), zTop=project(0,0,52);
@@ -170,6 +206,7 @@
         const pt=projectAttractor(q.x,q.y,q.z); ctx.shadowBlur=12*devicePixelRatio; ctx.shadowColor=c; ctx.fillStyle=c; ctx.beginPath(); ctx.arc(pt.x,pt.y,(q.owner<0?2.2:3.2)*devicePixelRatio,0,TAU); ctx.fill();
       }
       ctx.shadowBlur=0;
+      if (dev.defender) { const x=defender.x*W,y=defender.y*H,h=14*devicePixelRatio; ctx.strokeStyle='#ffd166'; ctx.lineWidth=2*devicePixelRatio; ctx.shadowBlur=16*devicePixelRatio; ctx.shadowColor='#ffd166'; ctx.beginPath(); ctx.roundRect(x-defender.halfWidth*devicePixelRatio,y-h/2,defender.halfWidth*2*devicePixelRatio,h,h/2); ctx.stroke(); ctx.fillStyle='#ffd166'; ctx.globalAlpha=.16; ctx.fill(); ctx.globalAlpha=1; ctx.shadowBlur=0; }
       const activePlayers = mode === 'solo' ? players.slice(0,1) : players;
       activePlayers.forEach((g,i)=>{ const x=g.x*W,y=g.y*H,halfWidth=gateHalfWidth(i)*devicePixelRatio,barHeight=7*devicePixelRatio; ctx.strokeStyle=colors[i]; ctx.lineWidth=2*devicePixelRatio; ctx.shadowBlur=18*devicePixelRatio; ctx.shadowColor=colors[i]; ctx.beginPath(); ctx.roundRect(x-halfWidth,y-barHeight/2,halfWidth*2,barHeight,barHeight/2); ctx.stroke(); ctx.fillStyle=colors[i]; ctx.globalAlpha=.16; ctx.fill(); ctx.globalAlpha=1; }); ctx.shadowBlur=0;
     }
@@ -180,6 +217,10 @@
     addEventListener('pointerdown', e=>{ if (e.pointerType === 'touch') moveCyanGate(e.clientX); }, { passive: true });
     addEventListener('keydown', e=>{ keys.add(e.key.toLowerCase()); if(e.key.toLowerCase()==='r') { particles=[]; players.forEach(p=>{p.score=0;p.energy=.15;p.y=TRACK_Y}); for(let i=0;i<4;i++) makeParticle(); } if(e.key===' ') paused=!paused; });
     addEventListener('keyup', e=>keys.delete(e.key.toLowerCase()));
+    devToggle.addEventListener('click', () => { const open=devPanel.classList.toggle('open'); devToggle.setAttribute('aria-expanded',String(open)); });
+    gateSizing.addEventListener('change', e => { dev.gateSizing=e.target.value; });
+    defenderEnabled.addEventListener('change', e => { dev.defender=e.target.checked; });
+    defenderAction.addEventListener('change', e => { dev.defenderAction=e.target.value; });
     document.querySelectorAll('.mode').forEach(button => button.addEventListener('click', () => {
       document.querySelectorAll('.mode').forEach(b => b.classList.remove('selected'));
       button.classList.add('selected'); mode = button.dataset.mode;
