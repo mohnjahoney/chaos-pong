@@ -138,15 +138,19 @@
       // per-particle trail buffers, not through accumulated canvas overlays.
       ctx.fillStyle='#05070d'; ctx.fillRect(0,0,W,H);
       drawAxes();
+      // Batch all trail geometry into three paths, then stroke each color once.
+      // This avoids one beginPath/stroke/state change per particle.
+      const trailPaths=[new Path2D(),new Path2D(),new Path2D()];
+      for (const q of particles) {
+        if (q.trailCount < 2) continue;
+        const path=trailPaths[q.owner+1];
+        const first=(q.trailHead-q.trailCount+TRAIL_POINTS)%TRAIL_POINTS;
+        for (let i=0;i<q.trailCount;i++) { const index=(first+i)%TRAIL_POINTS, t=project(q.trail[index*2],0,q.trail[index*2+1]); if(i===0) path.moveTo(t.x,t.y); else path.lineTo(t.x,t.y); }
+      }
+      ctx.globalAlpha=.32; ctx.lineWidth=1.25*devicePixelRatio;
+      ['#dbe2ff',colors[0],colors[1]].forEach((c,i)=>{ ctx.strokeStyle=c; ctx.stroke(trailPaths[i]); }); ctx.globalAlpha=1;
       for (const q of particles) {
         const c=q.owner<0?'#dbe2ff':colors[q.owner];
-        if (q.trailCount > 1) {
-          ctx.globalAlpha=.32; ctx.strokeStyle=c; ctx.lineWidth=1.25*devicePixelRatio; ctx.beginPath();
-          // Walk the ring from oldest sample to newest without shifting or copying.
-          const first=(q.trailHead-q.trailCount+TRAIL_POINTS)%TRAIL_POINTS;
-          for (let i=0;i<q.trailCount;i++) { const index=(first+i)%TRAIL_POINTS, t=project(q.trail[index*2],0,q.trail[index*2+1]); if(i===0) ctx.moveTo(t.x,t.y); else ctx.lineTo(t.x,t.y); }
-          ctx.stroke(); ctx.globalAlpha=1;
-        }
         const pt=project(q.x,q.y,q.z); ctx.shadowBlur=12*devicePixelRatio; ctx.shadowColor=c; ctx.fillStyle=c; ctx.beginPath(); ctx.arc(pt.x,pt.y,(q.owner<0?2.2:3.2)*devicePixelRatio,0,TAU); ctx.fill();
       }
       ctx.shadowBlur=0;
