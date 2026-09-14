@@ -60,10 +60,11 @@
     // Five-times denser sampling keeps the rendered Lorenz path smooth while
     // retaining the fixed-size ring buffer for predictable memory use.
     const TRAIL_POINTS = 40, TRAIL_SAMPLE_SECONDS = .009, TRACK_Y = .50;
+    const GATE_MIN_HALF_WIDTH = 18, GATE_MAX_HALF_WIDTH = 92;
     let W, H, scale, particles = [], keys = new Set(), last = 0, paused = false, mode = 'solo', running = false;
     const players = [
-      { x: .5, y: TRACK_Y, score: 0, energy: .15, color: colors[0] },
-      { x: .5, y: TRACK_Y, score: 0, energy: .15, color: colors[1] }
+      { x: .5, y: TRACK_Y, score: 0, energy: .15, owned: 0, color: colors[0] },
+      { x: .5, y: TRACK_Y, score: 0, energy: .15, owned: 0, color: colors[1] }
     ];
     const lorenz = { sigma: 10, rho: 28, beta: 8 / 3 };
 
@@ -108,6 +109,10 @@
       q.owner = playerIndex; q.cool = .7; q.vx = (playerIndex ? -1 : 1) * (2 + Math.random()*2); q.vy = (Math.random()-.5)*3;
       if (wasOwn && particles.length < 200) { makeParticle(q.x+.08, q.y+.08, q.z+.12, playerIndex, q.vx*.5, q.vy*.5); makeParticle(q.x-.08, q.y-.08, q.z-.12, playerIndex, q.vx*.5, q.vy*.5); }
     }
+    function gateHalfWidth(playerIndex) {
+      const ownershipRatio = players[playerIndex].owned / Math.max(1, particles.length);
+      return GATE_MAX_HALF_WIDTH - ownershipRatio * (GATE_MAX_HALF_WIDTH - GATE_MIN_HALF_WIDTH);
+    }
     function update(dt) {
       if (paused) return;
       if (mode === 'two') {
@@ -122,12 +127,14 @@
       for (const q of particles) {
         stepParticle(q, dt*.4); const pt = projectAttractor(q.x,q.y,q.z);
         let winner = -1, nearest = Infinity;
-        for (let i=0;i<activePlayers.length;i++) { const g=activePlayers[i], gx=g.x*W, gy=g.y*H, halfWidth=(10+g.energy*65)*devicePixelRatio, halfHeight=22*devicePixelRatio, distance=Math.abs(pt.x-gx); if (distance<halfWidth && Math.abs(pt.y-gy)<halfHeight && distance<nearest) { winner=i; nearest=distance; } }
+        for (let i=0;i<activePlayers.length;i++) { const g=activePlayers[i], gx=g.x*W, gy=g.y*H, halfWidth=gateHalfWidth(i)*devicePixelRatio, halfHeight=22*devicePixelRatio, distance=Math.abs(pt.x-gx); if (distance<halfWidth && Math.abs(pt.y-gy)<halfHeight && distance<nearest) { winner=i; nearest=distance; } }
         if (winner >= 0) catchParticle(q,winner);
       }
       if (particles.length < 4) makeParticle();
       let cyan=0, pink=0; for (const q of particles) { if(q.owner===0) cyan++; else if(q.owner===1) pink++; }
+      players[0].owned=cyan; players[1].owned=pink;
       cyanCount.textContent=cyan; pinkCount.textContent=pink; totalCount.textContent=particles.length;
+      p1fill.style.transform=`scaleX(${(gateHalfWidth(0)-GATE_MIN_HALF_WIDTH)/(GATE_MAX_HALF_WIDTH-GATE_MIN_HALF_WIDTH)})`; p2fill.style.transform=`scaleX(${(gateHalfWidth(1)-GATE_MIN_HALF_WIDTH)/(GATE_MAX_HALF_WIDTH-GATE_MIN_HALF_WIDTH)})`;
       p1score.textContent=players[0].score; p2score.textContent=players[1].score; p1fill.style.transform=`scaleX(${players[0].energy})`; p2fill.style.transform=`scaleX(${players[1].energy})`;
     }
     function drawAxes() {
@@ -164,7 +171,7 @@
       }
       ctx.shadowBlur=0;
       const activePlayers = mode === 'solo' ? players.slice(0,1) : players;
-      activePlayers.forEach((g,i)=>{ const x=g.x*W,y=g.y*H,halfWidth=(10+g.energy*65)*devicePixelRatio,barHeight=7*devicePixelRatio; ctx.strokeStyle=colors[i]; ctx.lineWidth=2*devicePixelRatio; ctx.shadowBlur=18*devicePixelRatio; ctx.shadowColor=colors[i]; ctx.beginPath(); ctx.roundRect(x-halfWidth,y-barHeight/2,halfWidth*2,barHeight,barHeight/2); ctx.stroke(); ctx.fillStyle=colors[i]; ctx.globalAlpha=.16; ctx.fill(); ctx.globalAlpha=1; }); ctx.shadowBlur=0;
+      activePlayers.forEach((g,i)=>{ const x=g.x*W,y=g.y*H,halfWidth=gateHalfWidth(i)*devicePixelRatio,barHeight=7*devicePixelRatio; ctx.strokeStyle=colors[i]; ctx.lineWidth=2*devicePixelRatio; ctx.shadowBlur=18*devicePixelRatio; ctx.shadowColor=colors[i]; ctx.beginPath(); ctx.roundRect(x-halfWidth,y-barHeight/2,halfWidth*2,barHeight,barHeight/2); ctx.stroke(); ctx.fillStyle=colors[i]; ctx.globalAlpha=.16; ctx.fill(); ctx.globalAlpha=1; }); ctx.shadowBlur=0;
     }
     function frame(t) { const dt=Math.min(.035,(t-last)/1000||.016); last=t; if (running) update(dt); draw(); requestAnimationFrame(frame); } requestAnimationFrame(frame);
     function moveCyanGate(clientX) { players[0].x=clientX/innerWidth; }
