@@ -197,7 +197,7 @@
     function resize() { W = canvas.width = innerWidth * devicePixelRatio; H = canvas.height = innerHeight * devicePixelRatio; canvas.style.width = innerWidth+'px'; canvas.style.height = innerHeight+'px'; scale = Math.min(W, H) * .021; if(threeRenderer){ threeRenderer.setSize(innerWidth,innerHeight,false); threeCamera.aspect=innerWidth/innerHeight; threeCamera.updateProjectionMatrix(); } }
     addEventListener('resize', resize); resize();
     function recordTrail(q) {
-      const offset = q.trailHead * 2;
+      const offset = q.trailHead * 3;
       q.trail[offset] = q.x; q.trail[offset + 1] = q.y; q.trail[offset + 2] = q.z;
       q.trailHead = (q.trailHead + 1) % TRAIL_POINTS;
       q.trailCount = Math.min(TRAIL_POINTS, q.trailCount + 1);
