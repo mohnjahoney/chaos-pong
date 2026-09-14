@@ -81,7 +81,8 @@
     // Canonical Lorenz view: plot X horizontally against Z vertically.
     // This exposes the attractor's recognizable two-wing / butterfly shape.
     function project(x, y, z) {
-      return { x: W/2 + x*scale*1.15, y: H*.72 - z*scale*1.05 };
+      // The projection is translated downward by 10 graph-coordinate units.
+      return { x: W/2 + x*scale*1.15, y: H*.72 + 10*scale*1.05 - z*scale*1.05 };
     }
     function stepParticle(q, dt) {
       const dx = lorenz.sigma*(q.y-q.x), dy = q.x*(lorenz.rho-q.z)-q.y, dz = q.x*q.y-lorenz.beta*q.z;
