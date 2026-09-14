@@ -83,13 +83,13 @@
     for (let i=0;i<4;i++) makeParticle();
 
     // Canonical Lorenz view: plot X horizontally against Z vertically.
-    // The axes use this unshifted projection.
+    // The axes remain at their existing translated position.
     function project(x, y, z) {
-      return { x: W/2 + x*scale*1.15, y: H*.72 - z*scale*1.05 };
-    }
-    // The attractor itself is translated down by 10 graph-coordinate units.
-    function projectAttractor(x, y, z) {
       return { x: W/2 + x*scale*1.15, y: H*.72 + 10*scale*1.05 - z*scale*1.05 };
+    }
+    // The attractor is translated an additional 10 graph-coordinate units down.
+    function projectAttractor(x, y, z) {
+      return { x: W/2 + x*scale*1.15, y: H*.72 + 20*scale*1.05 - z*scale*1.05 };
     }
     function stepParticle(q, dt) {
       const dx = lorenz.sigma*(q.y-q.x), dy = q.x*(lorenz.rho-q.z)-q.y, dz = q.x*q.y-lorenz.beta*q.z;
