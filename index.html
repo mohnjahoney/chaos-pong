@@ -18,6 +18,8 @@
     .mode.selected { border-color: #51e6ff; color: #e9edff; background: #142539; box-shadow: 0 0 20px #51e6ff1f; }
     #start { appearance: none; border: 0; border-radius: 8px; width: 100%; padding: 15px; background: linear-gradient(100deg, #51e6ff, #8b83ff); color: #06101b; font: inherit; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
     #hud { position: fixed; inset: 0 0 auto; display: flex; justify-content: space-between; padding: 18px 24px; pointer-events: none; text-shadow: 0 2px 12px #000; }
+    #population { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 20px; color: #dbe2ff; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; pointer-events: none; text-shadow: 0 2px 12px #000; }
+    #population span { white-space: nowrap; }
     .player { min-width: 170px; }
     .p2 { text-align: right; }
     .name { font-size: 12px; letter-spacing: .15em; text-transform: uppercase; opacity: .72; }
@@ -46,10 +48,12 @@
     <div class="player"><div class="name" style="color:#51e6ff">Cyan gate · drag horizontally</div><div class="score" id="p1score">0</div><div class="meter"><div class="fill" id="p1fill"></div></div></div>
     <div class="player p2"><div class="name" id="p2name" style="color:#ff5e9c">Pink gate · A / D</div><div class="score" id="p2score">0</div><div class="meter"><div class="fill" id="p2fill"></div></div></div>
   </div>
+  <div id="population" aria-label="Particle population"><span style="color:#51e6ff">cyan <b id="cyanCount">0</b></span><span style="color:#ff5e9c">pink <b id="pinkCount">0</b></span><span>total <b id="totalCount">0</b></span></div>
   <div id="help">Slide the cyan gate horizontally · catch your own color for 2 points + a split · R resets</div>
   <script>
     const canvas = document.querySelector('#game'), ctx = canvas.getContext('2d');
     const splash = document.querySelector('#splash'), p2hud = document.querySelector('.p2'), p2name = document.querySelector('#p2name');
+    const cyanCount = document.querySelector('#cyanCount'), pinkCount = document.querySelector('#pinkCount'), totalCount = document.querySelector('#totalCount');
     const p1score = document.querySelector('#p1score'), p2score = document.querySelector('#p2score');
     const p1fill = document.querySelector('#p1fill'), p2fill = document.querySelector('#p2fill');
     const TAU = Math.PI * 2, colors = ['#51e6ff', '#ff5e9c'];
@@ -119,6 +123,8 @@
         if (winner >= 0) catchParticle(q,winner);
       }
       if (particles.length < 4) makeParticle();
+      let cyan=0, pink=0; for (const q of particles) { if(q.owner===0) cyan++; else if(q.owner===1) pink++; }
+      cyanCount.textContent=cyan; pinkCount.textContent=pink; totalCount.textContent=particles.length;
       p1score.textContent=players[0].score; p2score.textContent=players[1].score; p1fill.style.transform=`scaleX(${players[0].energy})`; p2fill.style.transform=`scaleX(${players[1].energy})`;
     }
     function drawAxes() {
