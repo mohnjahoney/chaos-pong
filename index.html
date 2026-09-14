@@ -79,8 +79,8 @@
     </label>
   </aside>
   <div id="help">Slide the cyan gate horizontally · catch your own color for 2 points + a split · R resets</div>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.min.js"></script>
-  <script>
+  <script type="module">import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.min.js'; window.THREE=THREE;</script>
+  <script type="module">
     const canvas = document.querySelector('#game'), ctx = canvas.getContext('2d');
     const splash = document.querySelector('#splash'), p1name = document.querySelector('#p1name'), p2hud = document.querySelector('.p2'), p2name = document.querySelector('#p2name'), help = document.querySelector('#help');
     const devToggle = document.querySelector('#devToggle'), devPanel = document.querySelector('#devPanel'), gateSizing = document.querySelector('#gateSizing'), rendererSelect = document.querySelector('#renderer'), defenderEnabled = document.querySelector('#defenderEnabled'), defenderAction = document.querySelector('#defenderAction');
