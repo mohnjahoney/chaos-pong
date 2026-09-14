@@ -143,8 +143,8 @@
       });
       threeParticles.forEach((item,i)=>{ item.point.visible=i<particles.length; item.line.visible=i<particles.length; });
       const activePlayers=mode==='solo'?players.slice(0,1):players;
-      while(threeGates.length<activePlayers.length+(dev.defender?1:0)){ const mesh=new THREE.Mesh(new THREE.BoxGeometry(2,.45,.9),new THREE.MeshBasicMaterial({color:'#51e6ff',transparent:true,opacity:.85})); threeGroup.add(mesh); threeGates.push(mesh); }
-      threeGates.forEach((mesh,i)=>{ const isDefender=dev.defender && i===activePlayers.length, g=isDefender?defender:activePlayers[i]; if(!g){mesh.visible=false;return;} const half=isDefender?defender.halfWidth:gateHalfWidth(i), c=isDefender?'#ffd166':colors[i]; mesh.visible=true; mesh.position.set((g.x-.5)*42,0,15); mesh.scale.set(half/1.2,isDefender?2:1,1); mesh.material.color.set(c); });
+      while(threeGates.length<activePlayers.length+(dev.defender?1:0)){ const mesh=new THREE.Mesh(new THREE.CircleGeometry(1,32),new THREE.MeshBasicMaterial({color:'#51e6ff',transparent:true,opacity:.85,side:THREE.DoubleSide})); threeGroup.add(mesh); threeGates.push(mesh); }
+      threeGates.forEach((mesh,i)=>{ const isDefender=dev.defender && i===activePlayers.length, g=isDefender?defender:activePlayers[i]; if(!g){mesh.visible=false;return;} const half=isDefender?defender.halfWidth:gateHalfWidth(i), c=isDefender?'#ffd166':colors[i]; mesh.visible=true; mesh.position.set((g.x-.5)*42,0,15); mesh.scale.set(half/14,half/14,1); mesh.lookAt(threeCamera.position); mesh.material.color.set(c); });
       threeRenderer.render(threeScene,threeCamera);
     }
 
