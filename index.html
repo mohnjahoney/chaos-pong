@@ -55,7 +55,7 @@
     const TAU = Math.PI * 2, colors = ['#51e6ff', '#ff5e9c'];
     // Five-times denser sampling keeps the rendered Lorenz path smooth while
     // retaining the fixed-size ring buffer for predictable memory use.
-    const TRAIL_POINTS = 40, TRAIL_SAMPLE_SECONDS = .009, TRACK_Y = .58;
+    const TRAIL_POINTS = 40, TRAIL_SAMPLE_SECONDS = .009, TRACK_Y = .50;
     let W, H, scale, particles = [], keys = new Set(), last = 0, paused = false, mode = 'solo', running = false;
     const players = [
       { x: .5, y: TRACK_Y, score: 0, energy: .15, color: colors[0] },
@@ -63,7 +63,7 @@
     ];
     const lorenz = { sigma: 10, rho: 28, beta: 8 / 3 };
 
-    function resize() { W = canvas.width = innerWidth * devicePixelRatio; H = canvas.height = innerHeight * devicePixelRatio; canvas.style.width = innerWidth+'px'; canvas.style.height = innerHeight+'px'; scale = Math.min(W, H) * .015; }
+    function resize() { W = canvas.width = innerWidth * devicePixelRatio; H = canvas.height = innerHeight * devicePixelRatio; canvas.style.width = innerWidth+'px'; canvas.style.height = innerHeight+'px'; scale = Math.min(W, H) * .021; }
     addEventListener('resize', resize); resize();
     function recordTrail(q) {
       const offset = q.trailHead * 2;
