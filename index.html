@@ -36,6 +36,10 @@
     .fill { height: 100%; transform-origin: left; transition: transform .12s linear; }
     #p1fill { background: #51e6ff; } #p2fill { background: #ff5e9c; transform-origin: right; }
     #help { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); font-size: 11px; opacity: .55; white-space: nowrap; pointer-events: none; }
+    #labLaunch { appearance: none; border: 1px solid #394363; border-radius: 8px; width: 100%; margin-top: 10px; padding: 12px; background: #0d1120; color: #aeb9df; font: inherit; font-size: 11px; letter-spacing: .08em; cursor: pointer; }
+    #fluidHud { position: fixed; left: 18px; bottom: 18px; z-index: 3; display: none; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid #394363; border-radius: 6px; background: #0b1020dd; color: #b7c1e5; font-size: 10px; }
+    #fluidHud select, #fluidHud button { border: 1px solid #394363; border-radius: 4px; background: #11182a; color: #dbe2ff; padding: 5px; font: inherit; }
+    #fluidHud button { cursor: pointer; }
   </style>
 </head>
 <body>
@@ -51,6 +55,7 @@
         <button class="mode" data-mode="two">two players</button>
       </div>
       <button id="start">begin</button>
+      <button id="labLaunch">open fluid pong lab</button>
     </div>
   </section>
   <div id="hud">
@@ -58,6 +63,7 @@
     <div class="player p2"><div class="name" id="p2name" style="color:#ff5e9c">Pink gate · A / D</div><div class="score" id="p2score">0</div><div class="meter"><div class="fill" id="p2fill"></div></div></div>
   </div>
   <div id="population" aria-label="Particle population"><span style="color:#51e6ff">cyan <b id="cyanCount">0</b></span><span style="color:#ff5e9c">pink <b id="pinkCount">0</b></span><span>total <b id="totalCount">0</b></span></div>
+  <div id="fluidHud" aria-label="Fluid Pong Lab controls"><span>FLUID PONG LAB</span><select id="fluidMode"><option value="inertial">inertial particle</option><option value="front">front element</option><option value="reverse">field reversal</option></select><select id="fluidCount"><option value="1">1 ball</option><option value="2">2 balls</option><option value="10">10 balls</option><option value="100">100 balls</option><option value="400">400 balls</option></select><button id="fluidBack">back</button></div>
   <button id="devToggle" aria-expanded="false">DEV</button>
   <aside id="devPanel" aria-label="Developer options">
     <h2>DEV PANEL</h2>
@@ -97,6 +103,9 @@
     const lorenz = { sigma: 10, rho: 28, beta: 8 / 3 };
     const threeCanvas = document.querySelector('#threeGame');
     let threeRenderer, threeScene, threeCamera, threeGroup, threeParticles=[], threeGates=[];
+    const fluidHud=document.querySelector('#fluidHud'), fluidModeSelect=document.querySelector('#fluidMode'), fluidCountSelect=document.querySelector('#fluidCount'), fluidBack=document.querySelector('#fluidBack'), labLaunch=document.querySelector('#labLaunch');
+    let gameArea='chaos', fluidModel='inertial', fluidClock=0, fluidBalls=[];
+    const fluidPaddles=[{y:.5,score:0},{y:.5,score:0}];
 
     function initThree() {
       if (!window.THREE) return false;
@@ -137,6 +146,52 @@
       while(threeGates.length<activePlayers.length+(dev.defender?1:0)){ const mesh=new THREE.Mesh(new THREE.BoxGeometry(2,.45,.9),new THREE.MeshBasicMaterial({color:'#51e6ff',transparent:true,opacity:.85})); threeGroup.add(mesh); threeGates.push(mesh); }
       threeGates.forEach((mesh,i)=>{ const isDefender=dev.defender && i===activePlayers.length, g=isDefender?defender:activePlayers[i]; if(!g){mesh.visible=false;return;} const half=isDefender?defender.halfWidth:gateHalfWidth(i), c=isDefender?'#ffd166':colors[i]; mesh.visible=true; mesh.position.set((g.x-.5)*42,0,15); mesh.scale.set(half/1.2,isDefender?2:1,1); mesh.material.color.set(c); });
       threeRenderer.render(threeScene,threeCamera);
+    }
+
+    function fluidFlow(x,y,t) {
+      const steadyX=.72*Math.sin(Math.PI*x)*Math.cos(Math.PI*y), steadyY=-.72*Math.cos(Math.PI*x)*Math.sin(Math.PI*y);
+      return { steadyX, steadyY, timeX:.13*Math.sin(t*.7+y*8), timeY:.13*Math.cos(t*.55+x*7) };
+    }
+    function resetFluidBall(b, direction=Math.random()<.5?-1:1) {
+      b.x=.5+(Math.random()-.5)*.08; b.y=.2+Math.random()*.6; b.vx=direction*(.28+Math.random()*.12); b.vy=(Math.random()-.5)*.25; b.theta=direction<0?Math.PI:0; b.age=0;
+    }
+    function launchFluid(count) {
+      fluidBalls=[]; fluidClock=0; fluidPaddles[0].score=0; fluidPaddles[1].score=0;
+      for(let i=0;i<count;i++){ const b={x:0,y:0,vx:0,vy:0,theta:0,age:0}; resetFluidBall(b,i%2?1:-1); fluidBalls.push(b); }
+    }
+    function fluidPaddleHit(b, side) {
+      const paddle=fluidPaddles[side], hit=Math.abs(b.y-paddle.y)<.13;
+      if(!hit){ fluidPaddles[1-side].score++; resetFluidBall(b,side?1:-1); return; }
+      b.x=side?.94:.06;
+      if(fluidModel==='reverse') b.fieldSign*=-1;
+      else if(fluidModel==='front') b.theta=Math.PI-b.theta;
+      else b.vx=side?-Math.abs(b.vx):Math.abs(b.vx);
+    }
+    function updateFluid(dt) {
+      fluidClock+=dt;
+      fluidPaddles[0].y+=((keys.has('s')?1:0)-(keys.has('w')?1:0))*dt*.5;
+      fluidPaddles[1].y+=((keys.has('arrowdown')?1:0)-(keys.has('arrowup')?1:0))*dt*.5;
+      fluidPaddles[0].y=Math.max(.12,Math.min(.88,fluidPaddles[0].y));
+      fluidPaddles[1].y=Math.max(.12,Math.min(.88,fluidPaddles[1].y));
+      for(const b of fluidBalls){
+        const flow=fluidFlow(b.x,b.y,fluidClock);
+        if(fluidModel==='inertial') { b.vx+=(flow.steadyX+flow.timeX-b.vx)*dt*1.8; b.vy+=(flow.steadyY+flow.timeY-b.vy)*dt*1.8; b.x+=b.vx*dt; b.y+=b.vy*dt; }
+        else if(fluidModel==='front') { const target=Math.atan2(flow.steadyY+flow.timeY,flow.steadyX+flow.timeX); let delta=Math.atan2(Math.sin(target-b.theta),Math.cos(target-b.theta)); b.theta+=delta*dt*.7; b.x+=(flow.steadyX+flow.timeX+Math.cos(b.theta)*.42)*dt; b.y+=(flow.steadyY+flow.timeY+Math.sin(b.theta)*.42)*dt; }
+        else { if(b.fieldSign===undefined)b.fieldSign=1; b.x+=(b.fieldSign*flow.steadyX+flow.timeX)*dt; b.y+=(b.fieldSign*flow.steadyY+flow.timeY)*dt; }
+        b.age+=dt;
+        if(b.y<.06||b.y>.94){ b.y=Math.max(.06,Math.min(.94,b.y)); if(fluidModel==='front')b.theta=-b.theta; else b.vy=-b.vy; }
+        if(b.x<.035)fluidPaddleHit(b,0); else if(b.x>.965)fluidPaddleHit(b,1);
+        if(b.age>30)resetFluidBall(b);
+      }
+      p1score.textContent=fluidPaddles[0].score; p2score.textContent=fluidPaddles[1].score;
+    }
+    function drawFluid() {
+      ctx.fillStyle='#05070d'; ctx.fillRect(0,0,W,H);
+      ctx.save(); ctx.globalAlpha=.16; ctx.strokeStyle='#62709c'; ctx.fillStyle='#8490ba'; ctx.lineWidth=devicePixelRatio;
+      for(let ix=1;ix<12;ix++)for(let iy=1;iy<8;iy++){ const x=ix/12,y=iy/8,f=fluidFlow(x,y,fluidClock), sx=x*W,sy=y*H,ex=sx+f.steadyX*24*devicePixelRatio,ey=sy+f.steadyY*24*devicePixelRatio; ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(ex,ey);ctx.stroke();ctx.beginPath();ctx.arc(ex,ey,1.5*devicePixelRatio,0,TAU);ctx.fill(); }
+      ctx.restore(); ctx.globalAlpha=.26; ctx.strokeStyle='#8490ba'; ctx.beginPath();ctx.moveTo(W/2,0);ctx.lineTo(W/2,H);ctx.stroke();ctx.globalAlpha=1;
+      for(let i=0;i<2;i++){ const x=(i?.96:.04)*W,y=fluidPaddles[i].y*H;ctx.strokeStyle=colors[i];ctx.lineWidth=8*devicePixelRatio;ctx.shadowBlur=12*devicePixelRatio;ctx.shadowColor=colors[i];ctx.beginPath();ctx.moveTo(x,y-.13*H);ctx.lineTo(x,y+.13*H);ctx.stroke(); }
+      ctx.shadowBlur=0; for(const b of fluidBalls){ const x=b.x*W,y=b.y*H;ctx.fillStyle='#e8edff';ctx.beginPath();ctx.arc(x,y,Math.min(3,Math.max(1,devicePixelRatio))*devicePixelRatio,0,TAU);ctx.fill(); if(fluidModel==='front'){ctx.strokeStyle='#ffd166';ctx.lineWidth=devicePixelRatio;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+Math.cos(b.theta)*12*devicePixelRatio,y+Math.sin(b.theta)*12*devicePixelRatio);ctx.stroke();} }
     }
 
     function resize() { W = canvas.width = innerWidth * devicePixelRatio; H = canvas.height = innerHeight * devicePixelRatio; canvas.style.width = innerWidth+'px'; canvas.style.height = innerHeight+'px'; scale = Math.min(W, H) * .021; if(threeRenderer){ threeRenderer.setSize(innerWidth,innerHeight,false); threeCamera.aspect=innerWidth/innerHeight; threeCamera.updateProjectionMatrix(); } }
@@ -259,11 +314,11 @@
       const activePlayers = mode === 'solo' ? players.slice(0,1) : players;
       activePlayers.forEach((g,i)=>{ const x=g.x*W,y=g.y*H,halfWidth=gateHalfWidth(i)*devicePixelRatio,barHeight=7*devicePixelRatio; ctx.strokeStyle=colors[i]; ctx.lineWidth=2*devicePixelRatio; ctx.shadowBlur=18*devicePixelRatio; ctx.shadowColor=colors[i]; ctx.beginPath(); ctx.roundRect(x-halfWidth,y-barHeight/2,halfWidth*2,barHeight,barHeight/2); ctx.stroke(); ctx.fillStyle=colors[i]; ctx.globalAlpha=.16; ctx.fill(); ctx.globalAlpha=1; }); ctx.shadowBlur=0;
     }
-    function frame(t) { const dt=Math.min(.035,(t-last)/1000||.016); last=t; if (running) update(dt); if(dev.renderer==='three') drawThree(t); else draw(); requestAnimationFrame(frame); } requestAnimationFrame(frame);
+    function frame(t) { const dt=Math.min(.035,(t-last)/1000||.016); last=t; if(gameArea==='fluid'){ if(running)updateFluid(dt); drawFluid(); } else { if (running) update(dt); if(dev.renderer==='three') drawThree(t); else draw(); } requestAnimationFrame(frame); } requestAnimationFrame(frame);
     function moveCyanGate(clientX) { players[0].x=clientX/innerWidth; }
     addEventListener('mousemove', e=>moveCyanGate(e.clientX));
-    addEventListener('pointermove', e=>{ if (e.pointerType === 'touch' || e.buttons) moveCyanGate(e.clientX); }, { passive: true });
-    addEventListener('pointerdown', e=>{ if (e.pointerType === 'touch') moveCyanGate(e.clientX); }, { passive: true });
+    addEventListener('pointermove', e=>{ if (e.pointerType === 'touch' || e.buttons) { if(gameArea==='fluid')fluidPaddles[0].y=e.clientY/innerHeight; else moveCyanGate(e.clientX); } }, { passive: true });
+    addEventListener('pointerdown', e=>{ if (e.pointerType === 'touch') { if(gameArea==='fluid')fluidPaddles[0].y=e.clientY/innerHeight; else moveCyanGate(e.clientX); } }, { passive: true });
     addEventListener('keydown', e=>{ keys.add(e.key.toLowerCase()); if(e.key.toLowerCase()==='r') { particles=[]; players.forEach(p=>{p.score=0;p.energy=.15;p.y=TRACK_Y}); for(let i=0;i<4;i++) makeParticle(); } if(e.key===' ') paused=!paused; });
     addEventListener('keyup', e=>keys.delete(e.key.toLowerCase()));
     devToggle.addEventListener('click', () => { const open=devPanel.classList.toggle('open'); devToggle.setAttribute('aria-expanded',String(open)); });
@@ -271,6 +326,10 @@
     rendererSelect.addEventListener('change', e => { dev.renderer=e.target.value; syncRenderer(); });
     defenderEnabled.addEventListener('change', e => { dev.defender=e.target.checked; });
     defenderAction.addEventListener('change', e => { dev.defenderAction=e.target.value; });
+    fluidModeSelect.addEventListener('change', e => { fluidModel=e.target.value; launchFluid(Number(fluidCountSelect.value)); });
+    fluidCountSelect.addEventListener('change', e => launchFluid(Number(e.target.value)));
+    labLaunch.addEventListener('click', () => { gameArea='fluid'; running=true; splash.style.display='none'; fluidHud.style.display='flex'; p2hud.style.display=''; p2name.textContent='Right paddle'; document.querySelector('#population').style.display='none'; devPanel.classList.remove('open'); launchFluid(Number(fluidCountSelect.value)); });
+    fluidBack.addEventListener('click', () => { gameArea='chaos'; running=false; splash.style.display='grid'; fluidHud.style.display='none'; document.querySelector('#population').style.display=''; p2hud.style.display='none'; });
     document.querySelectorAll('.mode').forEach(button => button.addEventListener('click', () => {
       document.querySelectorAll('.mode').forEach(b => b.classList.remove('selected'));
       button.classList.add('selected'); mode = button.dataset.mode;
