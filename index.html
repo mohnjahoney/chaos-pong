@@ -120,8 +120,21 @@
       if (particles.length < 4) makeParticle();
       p1score.textContent=players[0].score; p2score.textContent=players[1].score; p1fill.style.transform=`scaleX(${players[0].energy})`; p2fill.style.transform=`scaleX(${players[1].energy})`;
     }
+    function drawAxes() {
+      const origin=project(0,0,0), xEnd=project(24,0,0), xStart=project(-24,0,0), zTop=project(0,0,52);
+      ctx.save(); ctx.strokeStyle='#64709a'; ctx.fillStyle='#8490ba'; ctx.lineWidth=devicePixelRatio; ctx.globalAlpha=.42;
+      ctx.beginPath(); ctx.moveTo(xStart.x,origin.y); ctx.lineTo(xEnd.x,origin.y); ctx.moveTo(origin.x,origin.y); ctx.lineTo(zTop.x,zTop.y); ctx.stroke();
+      ctx.font=`${10*devicePixelRatio}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+      ctx.textAlign='center'; ctx.textBaseline='top';
+      for (const value of [-20,-10,0,10,20]) { const t=project(value,0,0); ctx.beginPath(); ctx.moveTo(t.x,origin.y-4*devicePixelRatio); ctx.lineTo(t.x,origin.y+4*devicePixelRatio); ctx.stroke(); ctx.fillText(String(value),t.x,origin.y+8*devicePixelRatio); }
+      ctx.textAlign='right'; ctx.textBaseline='middle';
+      for (const value of [10,20,30,40,50]) { const t=project(0,0,value); ctx.beginPath(); ctx.moveTo(origin.x-4*devicePixelRatio,t.y); ctx.lineTo(origin.x+4*devicePixelRatio,t.y); ctx.stroke(); ctx.fillText(String(value),origin.x-8*devicePixelRatio,t.y); }
+      ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillText('X',xEnd.x+8*devicePixelRatio,origin.y+7*devicePixelRatio);
+      ctx.textAlign='left'; ctx.textBaseline='bottom'; ctx.fillText('Z',origin.x+8*devicePixelRatio,zTop.y-6*devicePixelRatio); ctx.restore();
+    }
     function draw() {
       ctx.fillStyle='rgba(5,7,13,.22)'; ctx.fillRect(0,0,W,H);
+      drawAxes();
       for (const q of particles) {
         const c=q.owner<0?'#dbe2ff':colors[q.owner];
         if (q.trailCount > 1) {
