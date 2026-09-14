@@ -134,7 +134,9 @@
       ctx.textAlign='left'; ctx.textBaseline='bottom'; ctx.fillText('Z',origin.x+8*devicePixelRatio,zTop.y-6*devicePixelRatio); ctx.restore();
     }
     function draw() {
-      ctx.fillStyle='rgba(5,7,13,.22)'; ctx.fillRect(0,0,W,H);
+      // Fully clear each frame: history is visible only through the explicit
+      // per-particle trail buffers, not through accumulated canvas overlays.
+      ctx.fillStyle='#05070d'; ctx.fillRect(0,0,W,H);
       drawAxes();
       for (const q of particles) {
         const c=q.owner<0?'#dbe2ff':colors[q.owner];
